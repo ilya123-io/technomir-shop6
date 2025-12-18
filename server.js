@@ -1,49 +1,51 @@
 const express = require('express');
 const { Pool } = require('pg');
-const bodyParser = require('body-parser');
-const cors = require('cors');
-const path = require('path');
-
 const app = express();
-app.use(cors());
-app.use(bodyParser.json());
+
+app.use(express.json());
 app.use(express.static(__dirname));
 
-// Подключение к PostgreSQL на Render через переменную окружения
+// Подключение к базе Render
 const pool = new Pool({
     connectionString: process.env.DATABASE_URL,
     ssl: { rejectUnauthorized: false }
 });
 
-// Лабораторная №3: Создание таблицы для пользователей и заказов
+// Создание таблиц
 pool.query(`
     CREATE TABLE IF NOT EXISTS users (
-        id SERIAL PRIMARY KEY,
-        name TEXT,
-        email TEXT UNIQUE NOT NULL,
+        id SERIAL PRIMARY KEY, 
+        name TEXT, 
+        email TEXT UNIQUE NOT NULL, 
         password TEXT NOT NULL
-    );
-    CREATE TABLE IF NOT EXISTS orders (
-        id SERIAL PRIMARY KEY,
-        name TEXT,
-        phone TEXT,
-        items TEXT
-    );
-`, (err) => {
-    if (err) console.error("Ошибка БД:", err);
-    else console.log("База данных готова");
-});
+    )
+`);
 
-// Маршрут для регистрации
+// Маршрут РЕГИСТРАЦИИ
 app.post('/register', async (req, res) => {
     const { name, email, password } = req.body;
     try {
         await pool.query('INSERT INTO users (name, email, password) VALUES ($1, $2, $3)', [name, email, password]);
         res.json({ success: true, message: "Регистрация успешна!" });
     } catch (err) {
-        res.status(500).json({ success: false, message: "Ошибка: Email уже занят" });
+        console.error(err);
+        res.status(500).json({ success: false, message: "Email уже зарегистрирован" });
     }
 });
 
-const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => console.log(`Сервер на порту ${PORT}`));
+// Маршрут ВХОДА
+app.post('/login', async (req, res) => {
+    const { email, password } = req.body;
+    try {
+        const result = await pool.query('SELECT * FROM users WHERE email = $1 AND password = $2', [email, password]);
+        if (result.rows.length > 0) {
+            res.json({ success: true, name: result.rows[0].name });
+        } else {
+            res.status(401).json({ success: false, message: "Неверный логин или пароль" });
+        }
+    } catch (err) {
+        res.status(500).json({ success: false, message: "Ошибка сервера" });
+    }
+});
+
+app.listen(process.env.PORT || 3000, () => console.log("Server is running..."));
