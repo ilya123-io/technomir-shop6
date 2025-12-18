@@ -14,7 +14,6 @@ document.addEventListener('DOMContentLoaded', () => {
     const checkoutPageBtn = document.getElementById('checkout-page-btn');
     const buyModal = document.getElementById('buy-modal');
     const buyForm = document.getElementById('buy-form');
-    const orderTotal = document.getElementById('order-total');
 
     // Форма входа
     const loginForm = document.getElementById('login-form');
@@ -28,7 +27,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const confirmPasswordInput = document.getElementById('confirm-password');
     const confirmPasswordWrap = document.getElementById('confirm-password-wrap');
 
-    // ГАЛЕРЕЯ
+    // 1. ГАЛЕРЕЯ (для карточек товаров)
     const galleryContainer = document.querySelector('.product-gallery-container');
     if (galleryContainer) {
         const mainImage = galleryContainer.querySelector('.main-image-wrapper img');
@@ -59,7 +58,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
-    // АВТОРИЗАЦИЯ (РАБОТА С СЕРВЕРОМ)
+    // 2. АВТОРИЗАЦИЯ
     const activeUserName = localStorage.getItem('activeUserName');
     if (activeUserName) setLoggedInState(activeUserName);
     
@@ -72,13 +71,10 @@ document.addEventListener('DOMContentLoaded', () => {
                     localStorage.removeItem('activeUserName');
                     location.reload(); 
                 }
-            } else {
-                if(authModal) { 
-                    authModal.style.display = 'block'; 
-                    isRegisterMode = false; 
-                    updateAuthUI(); 
-                    loginForm.reset(); 
-                }
+            } else if (authModal) { 
+                authModal.style.display = 'block'; 
+                isRegisterMode = false; 
+                updateAuthUI(); 
             }
         });
     }
@@ -92,97 +88,90 @@ document.addEventListener('DOMContentLoaded', () => {
     function updateAuthUI() {
         if (isRegisterMode) {
             authTitle.textContent = "Регистрация"; authSubmitBtn.textContent = "Зарегистрироваться"; toggleAuthLink.textContent = "Уже есть аккаунт? Войти";
-            nameWrap.style.display = 'block'; nameInput.setAttribute('required', 'true');
-            confirmPasswordWrap.style.display = 'block'; confirmPasswordInput.setAttribute('required', 'true');
+            nameWrap.style.display = 'block'; nameInput.required = true;
+            confirmPasswordWrap.style.display = 'block'; confirmPasswordInput.required = true;
         } else {
             authTitle.textContent = "Вход"; authSubmitBtn.textContent = "Войти"; toggleAuthLink.textContent = "Нет аккаунта? Регистрация";
-            nameWrap.style.display = 'none'; nameInput.removeAttribute('required');
-            confirmPasswordWrap.style.display = 'none'; confirmPasswordInput.removeAttribute('required');
+            nameWrap.style.display = 'none'; nameInput.required = false;
+            confirmPasswordWrap.style.display = 'none'; confirmPasswordInput.required = false;
         }
     }
 
-    // ОТПРАВКА НА СЕРВЕР (AJAX/FETCH)
     if(loginForm) {
         loginForm.addEventListener('submit', async (e) => {
             e.preventDefault();
             const email = emailInput.value.trim();
             const password = passwordInput.value.trim();
 
-            if (isRegisterMode) {
-                // РЕГИСТРАЦИЯ
-                const name = nameInput.value.trim();
-                const confirmPass = confirmPasswordInput.value.trim();
-                if (password !== confirmPass) { alert("Пароли не совпадают!"); return; }
+            const url = isRegisterMode ? '/register' : '/login';
+            const bodyData = isRegisterMode 
+                ? { name: nameInput.value.trim(), email, password } 
+                : { email, password };
 
-                try {
-                    let response = await fetch('/register', {
-                        method: 'POST',
-                        headers: {'Content-Type': 'application/json'},
-                        body: JSON.stringify({ name, email, password })
-                    });
-                    let result = await response.json();
-                    if (result.success) {
-                        alert("Успешно! Теперь войдите.");
+            try {
+                let response = await fetch(url, {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify(bodyData)
+                });
+                let result = await response.json();
+                if (result.success) {
+                    if (isRegisterMode) {
+                        alert("Регистрация успешна! Теперь войдите.");
                         isRegisterMode = false; updateAuthUI();
                     } else {
-                        alert("Ошибка: " + result.message);
-                    }
-                } catch (err) { alert("Ошибка сервера"); }
-            } else {
-                // ВХОД
-                try {
-                    let response = await fetch('/login', {
-                        method: 'POST',
-                        headers: {'Content-Type': 'application/json'},
-                        body: JSON.stringify({ email, password })
-                    });
-                    let result = await response.json();
-                    if (result.success) {
                         localStorage.setItem('activeUserName', result.name);
-                        setLoggedInState(result.name);
-                        authModal.style.display = 'none';
-                    } else {
-                        alert("Ошибка: " + result.message);
+                        location.reload();
                     }
-                } catch (err) { alert("Ошибка сервера"); }
-            }
+                } else { alert("Ошибка: " + result.message); }
+            } catch (err) { alert("Ошибка сервера"); }
         });
     }
 
     function setLoggedInState(name) {
         if(authBtn) {
             authBtn.textContent = 'Выйти'; 
-            authBtn.classList.add('logged-in-btn');
             let greeting = document.getElementById('greeting');
             if (!greeting) {
                 greeting = document.createElement('span'); greeting.id = 'greeting';
+                greeting.style.marginRight = "10px";
                 authBtn.parentNode.insertBefore(greeting, authBtn);
             }
             greeting.textContent = `Привет, ${name}`;
         }
     }
 
-    // КОРЗИНА
+    // 3. ИСПРАВЛЕННАЯ КОРЗИНА (теперь работает и в карточках!)
     document.querySelectorAll('.add-to-cart-button').forEach(btn => {
         btn.addEventListener('click', (e) => {
             e.preventDefault();
             let id, name, price, img;
-            if (btn.dataset.name) {
-                id = btn.dataset.id; name = btn.dataset.name; price = parseInt(btn.dataset.price);
-                const imgElem = btn.closest('.product-card').querySelector('img');
+
+            // Проверяем, где нажата кнопка: в списке или в карточке товара
+            const productCard = btn.closest('.product-card');
+            const productDetails = btn.closest('.product-details');
+
+            if (productCard) {
+                // Если на главной странице
+                id = btn.dataset.id;
+                name = btn.dataset.name;
+                price = parseInt(btn.dataset.price);
+                const imgElem = productCard.querySelector('img');
                 img = imgElem ? imgElem.src : '';
-            } else {
-                const infoBlock = btn.closest('.product-info');
-                name = infoBlock.querySelector('h1').innerText;
-                const priceText = infoBlock.querySelector('.price').innerText;
+            } else if (productDetails) {
+                // Если на странице товара (monitor.html, notebook.html и т.д.)
+                name = productDetails.querySelector('h1').innerText;
+                const priceText = productDetails.querySelector('.price').innerText;
                 price = parseInt(priceText.replace(/\D/g, ''));
-                id = name;
+                id = btn.dataset.id || name;
                 const mainImg = document.querySelector('.main-image-wrapper img');
                 img = mainImg ? mainImg.src : '';
             }
+
             cart.push({ id, name, price, img });
             localStorage.setItem('technoCart', JSON.stringify(cart));
             updateCartCounter();
+
             const originalText = btn.innerText;
             btn.innerText = "✓ Добавлено";
             btn.style.background = "#28a745";
@@ -195,6 +184,7 @@ document.addEventListener('DOMContentLoaded', () => {
     if (cartTableBody) renderCartPage();
 
     function renderCartPage() {
+        if (!cartTableBody) return;
         cartTableBody.innerHTML = '';
         let total = 0;
         if (cart.length === 0) {
@@ -204,8 +194,8 @@ document.addEventListener('DOMContentLoaded', () => {
                 total += item.price;
                 const row = document.createElement('tr');
                 row.innerHTML = `
-                    <td style="text-align:center;"><img src="${item.img}" class="cart-img-preview" alt="foto"></td>
-                    <td><div class="cart-item-name">${item.name}</div></td>
+                    <td style="text-align:center;"><img src="${item.img}" style="width:50px" alt="foto"></td>
+                    <td>${item.name}</td>
                     <td>${item.price.toLocaleString()} руб.</td>
                     <td style="text-align:center;"><button class="btn-remove" onclick="removePageCart(${index})">&times;</button></td>
                 `;
@@ -222,6 +212,7 @@ document.addEventListener('DOMContentLoaded', () => {
         renderCartPage();
     };
 
+    // 4. ОФОРМЛЕНИЕ ЗАКАЗА (Отправка в БД Render - Лабораторная №3)
     if (checkoutPageBtn) {
         checkoutPageBtn.addEventListener('click', () => {
             if (cart.length === 0) { alert("Корзина пуста!"); return; }
@@ -230,25 +221,34 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     if (buyForm) {
-        buyForm.addEventListener('submit', (e) => {
+        buyForm.addEventListener('submit', async (e) => {
             e.preventDefault();
-            alert("Заказ оформлен! Мы свяжемся с вами.");
-            cart = [];
-            localStorage.removeItem('technoCart');
-            updateCartCounter();
-            renderCartPage();
-            buyModal.style.display = 'none';
+            
+            const name = document.getElementById('buy-name').value;
+            const phone = document.getElementById('buy-phone').value;
+            
+            try {
+                let response = await fetch('/order', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({ name, phone, items: JSON.stringify(cart) })
+                });
+                let result = await response.json();
+                if (result.success) {
+                    alert("Заказ успешно сохранен в базу данных!");
+                    cart = [];
+                    localStorage.removeItem('technoCart');
+                    location.reload();
+                }
+            } catch (err) { alert("Ошибка при отправке в базу данных"); }
         });
     }
 
+    // Закрытие модалок
     closeBtns.forEach(btn => btn.addEventListener('click', () => {
         if(authModal) authModal.style.display = 'none';
         if(buyModal) buyModal.style.display = 'none';
     }));
-    window.addEventListener('click', (e) => {
-        if (e.target == authModal) authModal.style.display = 'none';
-        if (e.target == buyModal) buyModal.style.display = 'none';
-    });
 
     if (document.getElementById('map') && typeof ymaps !== 'undefined') {
         ymaps.ready(() => {
