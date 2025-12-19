@@ -10,7 +10,7 @@ const pool = new Pool({
     ssl: { rejectUnauthorized: false }
 });
 
-// Создание таблиц при запуске
+// Таблицы
 pool.query(`
     CREATE TABLE IF NOT EXISTS users (
         id SERIAL PRIMARY KEY, 
@@ -22,12 +22,11 @@ pool.query(`
         id SERIAL PRIMARY KEY, 
         name TEXT, 
         phone TEXT, 
-        address TEXT,
-        comment TEXT,
+        address TEXT,        -- сюда сохраним адрес из комментария
         items TEXT,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     );
-`).catch(err => console.log('Ошибка создания таблиц:', err));
+`).catch(err => console.log('Ошибка:', err));
 
 // Регистрация
 app.post('/register', async (req, res) => {
@@ -52,14 +51,14 @@ app.post('/login', async (req, res) => {
     }
 });
 
-// Заказы - ТЕПЕРЬ С АДРЕСОМ И КОММЕНТАРИЕМ
+// ЗАКАЗ - КОММЕНТАРИЙ СОХРАНЯЕТСЯ КАК АДРЕС
 app.post('/order', async (req, res) => {
-    const { name, phone, address, comment, items } = req.body;
+    const { name, phone, comment, items } = req.body;
     
     try {
         await pool.query(
-            'INSERT INTO orders (name, phone, address, comment, items) VALUES ($1, $2, $3, $4, $5)', 
-            [name, phone, address, comment, items]
+            'INSERT INTO orders (name, phone, address, items) VALUES ($1, $2, $3, $4)', 
+            [name, phone, comment, items] // comment -> address
         );
         res.json({ success: true });
     } catch (err) { 
@@ -68,7 +67,7 @@ app.post('/order', async (req, res) => {
     }
 });
 
-// Админка для просмотра заказов (добавил)
+// Просмотр заказов
 app.get('/admin/orders', async (req, res) => {
     try {
         const result = await pool.query('SELECT * FROM orders ORDER BY created_at DESC');
@@ -79,5 +78,5 @@ app.get('/admin/orders', async (req, res) => {
 });
 
 app.listen(process.env.PORT || 3000, () => {
-    console.log('Сервер запущен на порту', process.env.PORT || 3000);
+    console.log('Сервер запущен');
 });
